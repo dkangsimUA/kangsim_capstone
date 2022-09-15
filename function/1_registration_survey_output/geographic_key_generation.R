@@ -17,4 +17,20 @@ pacman::p_load(here, glue, openxlsx, tidyverse)
 # Nombre de Localidad Geoestadistica: Nombre asignado a una localidad por la ley o la costumbre. 
 
 # Note: AGEEML_2022882348534.csv file size is 44MB with 300k rows; it may take awhile
-mex_geo_keys<- read_csv("./data/file")
+mex_geo_keys<- read_csv("./data/AGEEML_2022882348534.csv")%>%
+  dplyr::select(dept = Nom_Ent, 
+                mun = Nom_Mun)%>%
+  distinct(mun, .keep_all = TRUE)%>%
+  mutate(dept= case_when(dept %in% c("Coahuila de Zaragoza")~ 
+                           "Coahuila",
+                         dept %in% c("Michoacán de Ocampo")~
+                           "Michoacán",
+                         dept %in% c("Veracruz de Ignacio de la Llave")~
+                           "Veracruz",
+                         TRUE ~ dept))
+
+#2330 obs (including state and municipality)
+
+#write_csv
+write_csv(mex_geo_keys, 
+          "./data_output/Mex_Geo_Key.csv")
