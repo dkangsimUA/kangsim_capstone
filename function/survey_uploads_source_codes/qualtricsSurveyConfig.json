@@ -1,0 +1,10 @@
+
+  {
+    "apiToken": "<insert Qualtrics api token>",
+    "apiDatacenterID": "<insert Datacenter ID>",
+    "apiLibraryID": "<insert libraryID>",
+    "qsfFileLocation": "data/2_survey_generation/2022-11-14/",
+    "importSurveyInputCSV": "./input/surveylist/COL/COL_surveylist.csv",
+    "uploadSurveyScriptOutputCSV": "data_output/result-survey-upload.csv",
+    "assignSurveyScriptOutputCSV": "data_output/result-survey-assignment.csv"
+  }

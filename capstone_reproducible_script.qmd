@@ -1,0 +1,364 @@
+---
+title: "MSDS_Captsone_piepline"
+author: "Eastern Kang"
+format: html
+editor: visual
+---
+
+```{r}
+pacman::p_load(here, fs, glue, 
+               qualtRics, openxlsx, 
+               tidyverse, readxl, 
+               beepr, tictoc,
+               foreach, future)
+```
+
+## Qualtrics API & wrangling
+
+This section provides a general overview of how to establish a connection between Qualtrics API and local computer. We do not provide Qualtrics credential; however, one can register for a free account. Please visit Qualtrics website for more detail: [Qualtrics Free Account](https://www.qualtrics.com/support/survey-platform/managing-your-account/trial-accounts/).
+
+Scripts below provide a simple step-by-step guidance on how to establish a connection using `qualtRics` package.
+
+1.  Retrieve the following information from the Qualtrics website.
+    1.  API Token
+
+    2.  Surveys Qualtrics IDs (starts with SV\_)
+
+    3.  Organization ID
+
+    4.  Datacenter ID
+
+These information can be found from the Qualtrics website: go to `account settings` --\> `qualtrics ids` --\> `API token`
+
+```{r add a script for linking Qualtrics}
+# Register your credential
+# This step needs to be done only once
+## REMOVE HASHTAGS
+#qualtRics::qualtrics_api_credentials(
+#  api_key = "<API Token>",
+#  base_url = "<Organization ID>.<Datacenter ID>.qualtrics.com",
+#  install = TRUE,
+#  overwrite=TRUE)
+```
+
+Once the `qualtrics_api_credentials` function registers the `api_key` to the local machine, we can **fetch** survey by using the `fetch_survey` function.
+
+The `fetch_survey` function is from the `QualtRics` package, which is a function that communicates with the Qualtrics API based on the Survey ID. The unique Survey ID can be retrieved from the Qualtrics User Portal.
+
+```{r}
+#download the survey results
+## REMOVE HASHTAGS (##) for scripts
+##fetch_survey(surveyID= "SV_#######>", 
+##             breakout_sets = FALSE,
+##             add_var_labels = FALSE,
+##             force_request = TRUE) %>% 
+##  #filter(Finished == TRUE) %>%  
+##  # Filters out in-progress surveys
+##  write_csv( # save survey results 
+##    file = here("data",
+##                "1_registration_survey",
+##                "1_survey_results",
+##                glue("MEX_registration_output_{Sys.Date()}.csv")),
+##    na = "")
+```
+
+On a side note: The `QualtRics` package has some functions that may be used for retrieving a list of surveys, or by survey ID.
+
+The survey customization is based on the `experts` location. In this example, Mexico has `dept` (Estado) and `mun`. We would use the information from the `experts` registration form and *`glue`* the strings together.
+
+The following script presents a simple wrangling process for filtering `experts` who consented and generates the `surveyname` required for customization.
+
+```{r}
+source(here("function", 
+            "MEX_wrangle_provinces.R"), 
+       encoding = "UTF-8")
+```
+
+```{r}
+#| echo: false
+MEX <- read_csv(here("data", 
+                     "1_registration_survey",
+                     "1_survey_results",
+        "MEX_registration_output_2022-11-14.csv"))%>%
+  mutate(across(starts_with("Q7."), 
+                as.character)
+         )%>%
+  MEX_wrangle()%>% #custom function
+  dplyr::select(EndDate, ResponseId, 
+                dept= Q6.2, mun)%>%
+  filter(!is.na(dept),
+         !is.na(mun))%>% #remove empty responses
+  mutate(drupal_surveyname = 
+           glue("{mun} en {dept}"))
+```
+
+The `drupal_surveyname` created above will be used for customizing the survey.
+
+## Survey generation
+
+Once `drupal_surveyname` has been created, we can create a customized version of survey based on the `ResponseID` and **the `geographical location`**.
+
+Let's load survey questionnaires. Sample Qualtrics Survey File (**QSF)** file has been provided for the demonstration.
+
+```{r}
+svy.2 <- read_file (here(
+  "data",
+  "2_survey_generation",
+  "demo_survey.qsf"))
+
+#create a variable for the new survey name
+name.svy <- "demo_survey"
+```
+
+We would need to download the responses file, then generate `locations` per respondent
+
+```{r}
+#download the responses file
+MEX_responses<- read_csv(here(
+  "data",
+  "1_registration_survey", 
+  "1_survey_results", 
+  "MEX_registration_output_2022-11-14.csv"), na="")%>% 
+  mutate(across(starts_with("Q7."), 
+                as.character))
+
+#generate location
+
+locations<- MEX_responses %>%
+  MEX_wrangle() %>% #refer to `MEX_wrangle_provinces.R`
+  dplyr::select(
+    ResponseId, EndDate, 
+    dept=Q6.2, mun)%>%
+  mutate(ResponseId = 
+           factor(ResponseId),
+         ResponseId = 
+           fct_reorder(ResponseId, EndDate))%>% 
+  group_by(ResponseId)%>%
+  mutate(id = cur_group_id(), 
+         #unique ID per respondent
+         id= str_pad(id, 5, pad="0"), 
+         #generate zeros
+         counter = str_pad(row_number(), 
+                           4, 
+                           pad="0"))%>% #generate counter per location
+  ungroup()%>% 
+  relocate(ResponseId, id, 
+           counter, dept, mun)%>%
+  filter(!is.na(dept),
+         !is.na(mun))%>%
+  mutate(name.svy.id = glue("{name.svy}_{id}_{counter}"),
+         drupal_surveyname = glue("{mun} en {dept}"))# create survey name
+```
+
+The following script generates individualized surveys:
+
+```{r}
+#crates the *.QSF file in a new column
+surveys <- locations%>%
+  mutate(survey = svy.2, 
+         #a copy of survey for each row
+         #insert mun name into the survey
+         survey = str_replace(
+           survey, "Mun-1", 
+           glue("{mun} en {dept}")), 
+         #insert id into survey name
+         survey = str_replace(
+           survey, "demo_survey",
+           name.svy.id))%>%
+  ungroup()
+
+#create a new folder to place surveys in
+dir.create(here(
+  "data",
+  "2_survey_generation",
+  Sys.Date()))
+
+#create the survey in *.QSF format and save it in the folder 
+
+surveys %>%
+  select(survey, name.svy.id)%>%
+  purrr::pwalk(function (survey, name.svy.id){
+    write_file(
+      survey, #save the survey
+      here(
+        "data",
+        "2_survey_generation",
+        Sys.Date(),
+        glue("{name.svy.id}.qsf")
+      ))
+  })
+```
+
+## Survey uploads
+
+Once the custom survey has been generated and saved in Qualtrics Survey Format form, we can upload the survey files to Qualtrics Server via Qualtrics API.
+
+In order to communicate with the Qualtrics API, we need to configure basic information required for the script to communicate with API and also directs the newest file name. Please see below for a sample script of setting up the JSON file.
+
+```{r}
+#load libraries
+# remove hashtags (##) for scripts
+##pacman::p_load(jsonlite, here, glue, tidyverse, 
+##               reticulate, beepr, blastula, keyring, 
+##               Rcpp)
+
+#compile information required for JSON file for Python
+#load sample JSON file
+##json_data<- read_json(here(
+##  "function",
+##  "survey_uploads_source_codes",
+##  "qualtricsSurveyConfig.json"
+##))
+
+#Replace information
+##json_data$apiToken<- "<insert Qualtrics api token>"
+##json_data$apiDatacenterID<- "<insert Datacenter ID>"
+##json_data$apiLibraryID<- "<insert libraryID>"
+
+#declare teh folder where all the QSF files are located
+##json_data$qsfFileLocation<- glue(
+##  "data/2_survey_generation/2022-11-14/")
+
+#indicate the new file to store the Qualtrics meta data of the uploaded surveys
+
+##json_data$uploadSurveyScriptOutputCSV<- glue(
+##  "data_output/result-survey-upload.csv")
+
+#indicate the new file to store the Qualtrics meta data of the assigned Qualtrics surveys
+##json_data$assignSurveyScriptOutputCSV<- glue(
+##  "data_output/result-survey-assignment.csv")
+
+#save over the json file with current information
+##json_data %>%
+##  as_tibble%>%
+##  toJSON(pretty = TRUE)%>%
+##  str_remove("\\[") %>% # I can't get the [] around the json to leave, [] is an array and we don't want that. 
+##  str_remove("\\]") %>%  
+##  write_file(here("function",
+##                  "survey_uploads_source_codes",
+##                  "qualtricsSurveyConfig.json"))
+
+```
+
+As this step requires users to input *Qualtrics credentials*, we only share Python source codes under the `functions/survey_uploads_source_codes` folder. One may call out the python script from R environment using the following script:
+
+```{r}
+#remove hashtags(##) for script
+##py_install("requests") 
+##py_config() 
+
+# run the python script 
+##source_python("function",
+##              "survey_uploads_source_codes",
+##              "1_upload_surveys.py")
+
+#repeat the same for the rest of Python scripts
+```
+
+Alternatively, one may upload each QSF file manually using the Qualtrics portal. The rest of reproducible script uses completed mock survey data set.
+
+## Processing completed survey
+
+Once all generating, uploading steps are completed, experts should have received the survey link to participate to the custom survey. Once survey information are completed, we can download and process data.
+
+We use a mock survey data of 10 completed surveys for demonstration purposes.
+
+We use the following custom function to fetch data from Qualtrics API
+
+```{r}
+fetch<- function(qual_id){
+  print(paste("trying: ", qual_id))
+  fetched<- fetch_survey(qual_id, 
+                         breakout_sets = FALSE,
+                         add_var_labels = TRUE,
+                         force_request = TRUE,
+                         verbose=FALSE)
+  fetched<- fetched%>%
+    dplyr::mutate(qualtricsSurveyID = !!qual_id)%>%
+    relocate(qualtricsSurveyID, 
+             .before = StartDate)%>%
+    return(fetched)
+}
+```
+
+It is important to note that the communication between Qualtrics API and local machine may fail about 2% of the time. Rodriguez has suggested to apply purrr::possibly for the function to continue working even if receive an error message. (read more about the topic [here.](https://www.brodrigues.co/blog/2018-03-12-keep_trying/)
+
+```{r}
+possibly_fetch<- purrr::possibly(fetch, 
+                                 otherwise = NULL)
+```
+
+Load the list of survey IDs to be fetched:
+
+#for demonstration
+
+API token: GniHo1l4T8gnyu9iAgLguP3y2b69GzZNQfYegxZi
+
+Organization ID: uarizona
+
+Datacenter ID: iad1
+
+My library:UR_56zKfvFe2new5eK
+
+```{r}
+surveys_completed<- map (here(
+  "data",
+  "3_qualtrics_data",
+  "completion_stats.csv"),
+  read_csv,
+  col_types="cc")%>%
+  reduce(bind_rows)%>%
+  rename(name.svy.id = name)
+
+fetch_ids<- surveys_completed%>%
+  pull(qualtricsSurveyID)
+
+```
+
+Qualtrics credentials are required for the fetching to be completed. We present a sample script below:
+
+```{r}
+# remove hashtags for the code: 
+
+##tic()
+##survey_output<- map(fetch_ids, 
+##                    possibly_fetch)%>%
+##  reduce(bind_rows) #combine responses into one data frame
+##toc()
+```
+
+Note that fetching surveys based on the survey ID is done serially, meaning if we were to fetch 10 IDs, the first request must be completed in order to fetch the next one. Depends on the survey file size and the number of surveys to fetch, the processing time may grow exponentially (\~ up to 7 hours for processing 300 IDs).
+
+The following script demonstrates the parallel approach.
+
+```{r}
+# set the number of data lists
+n<- 2
+
+#change values into df
+fetch_ids_df<- as.data.frame(fetch_ids)%>%
+  rename(c=fetch_ids)
+
+#slice by n
+
+#create and register cluster
+n.cores<- parallel::detectCores(logical=F)-1 
+my.cluster<- parallel::makecluster(n.cores)
+doParallel::registerDoParallel(cl=my.cluster)
+
+#parallel approach
+tic()
+survey_output<- foreach(
+  i=1:n,
+  .combine = "rbind",
+  .packages = c("tidyverse",
+                "qualtRics")) %dopar%{
+                  #fit
+                  list[[i]]$c%>%
+                    map(possibly_fetch)%>%
+                    reduce(bind_rows)
+                }
+toc()
+```
+
+By taking the parallel approach, times can be reduced from 7 hours to 2.1 hours to process 300 IDs.
