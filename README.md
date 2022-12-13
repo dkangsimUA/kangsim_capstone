@@ -11,4 +11,4 @@ Code: All code is licensed under the [BSD 2-Clause License](https://github.com/d
 
 ## Contributions and Code of Conduct
 
-We welcome contributions from everyone. Before you get started, please see our contributor guidelines. Please note that this project is released with a [Contributor Code of Conduct](https://www.contributor-covenant.org/version/2/0/code_of_conduct/). By contributing to this project, you agree to abide by its terms.
+We welcome contributions from everyone. Before you get started, please see our [contributor guidelines](CONTRIBUTING.md). Please note that this project is released with a [Contributor Code of Conduct](https://www.contributor-covenant.org/version/2/0/code_of_conduct/). By contributing to this project, you agree to abide by its terms.
