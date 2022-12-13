@@ -13,6 +13,14 @@ pacman::p_load(here, fs, glue,
                foreach, future)
 ```
 
+> Package descriptions:
+>
+> -   `here`: constructs paths to the project's files, and facilitates reproducibility of the script. [link](https://here.r-lib.org)
+>
+> -   `fs`: provides a cross-platform interface to file system operations. Alternatively, basis function can be used.
+>
+> -   `foreach` / `future`: parallel and distributed processing in R.
+
 ## Qualtrics API & wrangling
 
 This section provides a general overview of how to establish a connection between Qualtrics API and local computer. We do not provide Qualtrics credential; however, one can register for a free account. Please visit Qualtrics website for more detail: [Qualtrics Free Account](https://www.qualtrics.com/support/survey-platform/managing-your-account/trial-accounts/).
@@ -31,14 +39,17 @@ Scripts below provide a simple step-by-step guidance on how to establish a conne
 These information can be found from the Qualtrics website: go to `account settings` --\> `qualtrics ids` --\> `API token`
 
 ```{r add a script for linking Qualtrics}
+
+#| eval: false
+
 # Register your credential
 # This step needs to be done only once
-## REMOVE HASHTAGS
-#qualtRics::qualtrics_api_credentials(
-#  api_key = "<API Token>",
-#  base_url = "<Organization ID>.<Datacenter ID>.qualtrics.com",
-#  install = TRUE,
-#  overwrite=TRUE)
+
+qualtRics::qualtrics_api_credentials(
+  api_key = "<API Token>",
+  base_url = "<Organization ID>.<Datacenter ID>.qualtrics.com",
+  install = TRUE,
+  overwrite=TRUE)
 ```
 
 Once the `qualtrics_api_credentials` function registers the `api_key` to the local machine, we can **fetch** survey by using the `fetch_survey` function.
@@ -46,20 +57,22 @@ Once the `qualtrics_api_credentials` function registers the `api_key` to the loc
 The `fetch_survey` function is from the `QualtRics` package, which is a function that communicates with the Qualtrics API based on the Survey ID. The unique Survey ID can be retrieved from the Qualtrics User Portal.
 
 ```{r}
+#| eval: false
 #download the survey results
+
 ## REMOVE HASHTAGS (##) for scripts
-##fetch_survey(surveyID= "SV_#######>", 
-##             breakout_sets = FALSE,
-##             add_var_labels = FALSE,
-##             force_request = TRUE) %>% 
-##  #filter(Finished == TRUE) %>%  
-##  # Filters out in-progress surveys
-##  write_csv( # save survey results 
-##    file = here("data",
-##                "1_registration_survey",
-##                "1_survey_results",
-##                glue("MEX_registration_output_{Sys.Date()}.csv")),
-##    na = "")
+fetch_survey(surveyID= "SV_#######>", 
+             breakout_sets = FALSE,
+             add_var_labels = FALSE,
+             force_request = TRUE) %>% 
+  #filter(Finished == TRUE) %>%  
+  # Filters out in-progress surveys
+  write_csv( # save survey results 
+    file = here("data",
+                "1_registration_survey",
+                "1_survey_results",
+                glue("MEX_registration_output_{Sys.Date()}.csv")),
+    na = "")
 ```
 
 On a side note: The `QualtRics` package has some functions that may be used for retrieving a list of surveys, or by survey ID.
@@ -193,64 +206,67 @@ surveys %>%
 
 Once the custom survey has been generated and saved in Qualtrics Survey Format form, we can upload the survey files to Qualtrics Server via Qualtrics API.
 
-In order to communicate with the Qualtrics API, we need to configure basic information required for the script to communicate with API and also directs the newest file name. Please see below for a sample script of setting up the JSON file.
+In order to communicate with the Qualtrics API, we need to configure **basic information** required for the script to communicate with API (e.g., API token) and also directs the newest file name. Please see below for a sample script of setting up the JSON file.
 
 ```{r}
+#| eval: false
 #load libraries
-# remove hashtags (##) for scripts
-##pacman::p_load(jsonlite, here, glue, tidyverse, 
-##               reticulate, beepr, blastula, keyring, 
-##               Rcpp)
+
+pacman::p_load(jsonlite, here, glue, tidyverse, 
+               reticulate, beepr, blastula, keyring, 
+               Rcpp)
 
 #compile information required for JSON file for Python
 #load sample JSON file
-##json_data<- read_json(here(
-##  "function",
-##  "survey_uploads_source_codes",
-##  "qualtricsSurveyConfig.json"
-##))
+json_data<- read_json(here(
+  "function",
+  "survey_uploads_source_codes",
+  "qualtricsSurveyConfig.json"
+))
 
 #Replace information
-##json_data$apiToken<- "<insert Qualtrics api token>"
-##json_data$apiDatacenterID<- "<insert Datacenter ID>"
-##json_data$apiLibraryID<- "<insert libraryID>"
+json_data$apiToken<- "<insert Qualtrics api token>"
+json_data$apiDatacenterID<- "<insert Datacenter ID>"
+json_data$apiLibraryID<- "<insert libraryID>"
 
 #declare teh folder where all the QSF files are located
-##json_data$qsfFileLocation<- glue(
-##  "data/2_survey_generation/2022-11-14/")
+json_data$qsfFileLocation<- glue(
+  "data/2_survey_generation/2022-11-14/")
 
 #indicate the new file to store the Qualtrics meta data of the uploaded surveys
 
-##json_data$uploadSurveyScriptOutputCSV<- glue(
-##  "data_output/result-survey-upload.csv")
+json_data$uploadSurveyScriptOutputCSV<- glue(
+  "data_output/result-survey-upload.csv")
 
 #indicate the new file to store the Qualtrics meta data of the assigned Qualtrics surveys
-##json_data$assignSurveyScriptOutputCSV<- glue(
-##  "data_output/result-survey-assignment.csv")
+json_data$assignSurveyScriptOutputCSV<- glue(
+  "data_output/result-survey-assignment.csv")
 
 #save over the json file with current information
-##json_data %>%
-##  as_tibble%>%
-##  toJSON(pretty = TRUE)%>%
-##  str_remove("\\[") %>% # I can't get the [] around the json to leave, [] is an array and we don't want that. 
-##  str_remove("\\]") %>%  
-##  write_file(here("function",
-##                  "survey_uploads_source_codes",
-##                  "qualtricsSurveyConfig.json"))
+json_data %>%
+  as_tibble%>%
+  toJSON(pretty = TRUE)%>%
+  str_remove("\\[") %>% # I can't get the [] around the json to leave, [] is an array and we don't want that. 
+  str_remove("\\]") %>%  
+  write_file(here("function",
+                  "survey_uploads_source_codes",
+                  "qualtricsSurveyConfig.json"))
 
 ```
 
 As this step requires users to input *Qualtrics credentials*, we only share Python source codes under the `functions/survey_uploads_source_codes` folder. One may call out the python script from R environment using the following script:
 
 ```{r}
-#remove hashtags(##) for script
-##py_install("requests") 
-##py_config() 
+#| eval: false
+
+##py_install("requests") #needs only once
+
+py_config() 
 
 # run the python script 
-##source_python("function",
-##              "survey_uploads_source_codes",
-##              "1_upload_surveys.py")
+source_python("function",
+              "survey_uploads_source_codes",
+              "1_upload_surveys.py")
 
 #repeat the same for the rest of Python scripts
 ```
@@ -318,13 +334,13 @@ fetch_ids<- surveys_completed%>%
 Qualtrics credentials are required for the fetching to be completed. We present a sample script below:
 
 ```{r}
-# remove hashtags for the code: 
+#| eval: false
 
-##tic()
-##survey_output<- map(fetch_ids, 
-##                    possibly_fetch)%>%
-##  reduce(bind_rows) #combine responses into one data frame
-##toc()
+tic()
+survey_output<- map(fetch_ids, 
+                    possibly_fetch)%>%
+  reduce(bind_rows) #combine responses into one data frame
+toc()
 ```
 
 Note that fetching surveys based on the survey ID is done serially, meaning if we were to fetch 10 IDs, the first request must be completed in order to fetch the next one. Depends on the survey file size and the number of surveys to fetch, the processing time may grow exponentially (\~ up to 7 hours for processing 300 IDs).
